@@ -4,9 +4,14 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "Switcher.js" as Switcher
 
 // Fullscreen workspace overview. Summoned over shell IPC:
 //   omarchy-shell shell toggle ecylmz.spaceview
+//
+// A payload of {"step": 1} or {"step": -1} opens it as a workspace switcher
+// instead (Super+Tab, Super+Shift+Tab): each further step moves the pick, and
+// `commitSwitch`, called when Super is let go, goes to the picked workspace.
 //
 // Hyprland is configured in Lua here, so every dispatch goes through the
 // hl.dsp.* form; the classic "workspace 3" syntax is a Lua syntax error.
@@ -35,6 +40,8 @@ Item {
   property string requestedWindowAddress: ""
   property point dragScenePosition: Qt.point(0, 0)
   property int selectedCardIndex: -1
+  // A Super+Tab session is under way: letting go of Super switches workspace.
+  property bool switching: false
 
   readonly property var workspaceModel: root.workspaceIds()
   readonly property int workspaceCount: workspaceModel.length
@@ -153,13 +160,42 @@ Item {
     return Math.min(targetRow * cols + column, count - 1)
   }
 
-  function initialSelectedCardIndex() {
+  function focusedCardIndex() {
     var focused = Hyprland.focusedWorkspace
-    if (focused) {
-      var index = root.workspaceModel.indexOf(focused.id)
-      if (index >= 0) return index
-    }
+    return focused ? root.workspaceModel.indexOf(focused.id) : -1
+  }
+
+  function initialSelectedCardIndex() {
+    var index = root.focusedCardIndex()
+    if (index >= 0) return index
     return root.cardCount > 0 ? 0 : -1
+  }
+
+  // The "add" card is left out: a switcher cycles workspaces that exist.
+  function stepSwitcher(direction) {
+    var from = root.switching ? root.selectedCardIndex : root.focusedCardIndex()
+    root.switching = true
+    root.selectedCardIndex = Switcher.next(from, direction, root.workspaceCount)
+  }
+
+  // Called over IPC when Super is let go. Does nothing unless a session is
+  // live, so a stray release (after Esc, or after a gesture opened the
+  // overview) never switches workspace.
+  function commitSwitch() {
+    var index = Switcher.commitIndex(root.switching, root.selectedCardIndex, root.workspaceCount)
+    root.switching = false
+    if (index < 0) return "ignored"
+    root.activateWorkspace(root.workspaceModel[index])
+    return "ok"
+  }
+
+  function switchStep(payloadJson) {
+    try {
+      var step = Number(JSON.parse(payloadJson || "{}").step)
+      return step === 1 || step === -1 ? step : 0
+    } catch (e) {
+      return 0
+    }
   }
 
   function moveCardSelection(dx, dy) {
@@ -222,6 +258,14 @@ Item {
   }
 
   function open(payloadJson) {
+    var step = root.switchStep(payloadJson)
+
+    // Already showing: another Tab just moves the pick.
+    if (step !== 0 && root.opened) {
+      root.stepSwitcher(step)
+      return
+    }
+
     Hyprland.refreshToplevels()
     Hyprland.refreshWorkspaces()
     rescueTimer.restart()
@@ -230,7 +274,9 @@ Item {
     root.requestedWorkspaceId = -1
     root.requestedWindowAddress = ""
     root.selectedCardIndex = root.initialSelectedCardIndex()
+    root.switching = false
     root.opened = true
+    if (step !== 0) root.stepSwitcher(step)
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -241,6 +287,7 @@ Item {
 
     root.draggedToplevel = null
     root.selectedCardIndex = -1
+    root.switching = false
     root.opened = false
   }
 
