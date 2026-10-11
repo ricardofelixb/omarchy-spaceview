@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// One workspace in the grid: a labelled card holding a tile per window.
+// One workspace in the grid: a card holding a tile per window.
 // Doubles as a drop target so windows can be dragged between workspaces.
 BorderSurface {
   id: root
@@ -95,6 +95,25 @@ BorderSurface {
     return false
   }
 
+  // How far to slide the tiles, as fractions of the monitor, so the box around
+  // all of them sits in the middle of the stage. A lone window or a layout
+  // pushed aside by the bar would otherwise hang off-centre in the card.
+  readonly property var groupOffset: {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+
+    for (var i = 0; i < layoutRects.length; i++) {
+      var rect = layoutRects[i]
+      if (!rect) continue
+      minX = Math.min(minX, rect.x)
+      minY = Math.min(minY, rect.y)
+      maxX = Math.max(maxX, rect.x + rect.width)
+      maxY = Math.max(maxY, rect.y + rect.height)
+    }
+
+    if (!isFinite(minX)) return { x: 0, y: 0 }
+    return { x: 0.5 - (minX + maxX) / 2, y: 0.5 - (minY + maxY) / 2 }
+  }
+
   // A preview box whose edges fall between physical pixels makes the live
   // capture resample, which smears terminal text on a fractionally scaled
   // monitor. Round to the device pixel grid instead.
@@ -103,7 +122,6 @@ BorderSurface {
     return Math.round(value * ratio) / ratio
   }
 
-  readonly property real headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
   readonly property int draggedSourceWorkspaceId: draggedToplevel && draggedToplevel.workspace
     ? Number(draggedToplevel.workspace.id) : -1
   readonly property bool dragActive: draggedToplevel !== null
@@ -203,46 +221,6 @@ BorderSurface {
     Behavior on color { ColorAnimation { duration: 60 } }
   }
 
-  Item {
-    id: header
-    visible: !root.addWorkspace
-    z: 3
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.leftMargin: Style.spacing.md
-    anchors.rightMargin: Style.spacing.md
-    height: root.headerHeight
-
-    Row {
-      anchors.verticalCenter: parent.verticalCenter
-      width: parent.width
-      spacing: Style.spacing.sm
-
-      Rectangle {
-        anchors.verticalCenter: parent.verticalCenter
-        visible: root.focused
-        width: visible ? Style.space(8) : 0
-        height: width
-        radius: width / 2
-        color: Color.accent
-      }
-
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.workspaceId === 10 ? "Workspace 0" : "Workspace " + root.workspaceId
-        textFormat: Text.PlainText
-        color: root.focused ? Color.accent : Color.menu.text
-        opacity: root.focused ? 1 : (root.occupied ? 0.82 : 0.5)
-        font.family: Style.font.menuFamily
-        font.pixelSize: Style.font.title
-        font.bold: root.focused
-        elide: Text.ElideRight
-        verticalAlignment: Text.AlignVCenter
-      }
-    }
-  }
-
   Text {
     visible: !root.occupied && !root.addWorkspace
     anchors.centerIn: previewArea
@@ -258,10 +236,7 @@ BorderSurface {
     id: previewArea
     visible: !root.addWorkspace
     z: 5
-    anchors.top: header.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
+    anchors.fill: parent
     anchors.margins: Style.spacing.md
 
     // The stage keeps the monitor's aspect ratio, so a tall split reads as a
@@ -286,8 +261,8 @@ BorderSurface {
           readonly property var rect: root.layoutRects[index] || null
 
           visible: rect !== null
-          x: rect ? root.snap(rect.x * stage.width + stage.inset) : 0
-          y: rect ? root.snap(rect.y * stage.height + stage.inset) : 0
+          x: rect ? root.snap((rect.x + root.groupOffset.x) * stage.width + stage.inset) : 0
+          y: rect ? root.snap((rect.y + root.groupOffset.y) * stage.height + stage.inset) : 0
           width: rect ? Math.max(1, root.snap(rect.width * stage.width - stage.inset * 2)) : 1
           height: rect ? Math.max(1, root.snap(rect.height * stage.height - stage.inset * 2)) : 1
           z: rect && rect.floating ? 2 : 1
