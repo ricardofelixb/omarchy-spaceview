@@ -88,6 +88,100 @@ hl.gesture({ fingers = 3, direction = "up", action = spaceview("summon") })
 hl.gesture({ fingers = 3, direction = "down", action = spaceview("hide") })
 ```
 
+## Workspace switcher (Super+Tab)
+
+Hold `Super` and press `Tab` to open Spaceview with the next workspace picked.
+Keep holding `Super` and press `Tab` or `Shift+Tab` to move the pick, then let
+go of `Super` to switch to it. `Esc` cancels without switching. An overview
+opened any other way (gesture, `toggle`) is unaffected: letting go of `Super`
+there does nothing.
+
+Hyprland has to tell Spaceview when `Super` is released, so this needs a little
+config of your own. Save this as `~/.config/hypr/spaceview.lua`, add
+`require("hypr.spaceview")` after `require("hypr.bindings")` in
+`~/.config/hypr/hyprland.lua`, then run `hyprctl reload` and
+`hyprctl configerrors`:
+
+```lua
+-- Spaceview setup: a Super+Tab workspace switcher, and no tap-and-drag while
+-- the overview is up. Documented in the Spaceview README.
+local PLUGIN = "ecylmz.spaceview"
+local NAMESPACE = "spaceview" -- the overlay's layer-shell namespace
+
+-- Hold Super and tap Tab to walk the workspaces; letting go of Super switches
+-- to the one picked. Omarchy binds Super+Tab to "Next workspace" and
+-- Super+Shift+Tab to "Previous workspace"; these take their place.
+local switching = false
+
+local function step(direction)
+  switching = true
+  hl.exec_cmd("omarchy-shell -q shell summon " .. PLUGIN .. " '{\"step\":" .. direction .. "}'")
+end
+
+-- The overlay ignores a release it has no session for, so a stale one is
+-- harmless; the flag only saves the call. Hyprland sees the release even when
+-- the overlay has not taken keyboard focus yet, which a quick tap can beat.
+local function release()
+  if not switching then return end
+  switching = false
+  hl.exec_cmd("omarchy-shell -q shell call " .. PLUGIN .. " commitSwitch ''")
+end
+
+hl.unbind("SUPER + TAB")
+hl.unbind("SUPER + SHIFT + TAB")
+o.bind("SUPER + TAB", "Workspace switcher: next", function() step(1) end)
+o.bind("SUPER + SHIFT + TAB", "Workspace switcher: previous", function() step(-1) end)
+hl.bind("SUPER + SUPER_L", release, { release = true })
+hl.bind("SUPER + SUPER_R", release, { release = true })
+
+-- A tap on a preview should click it, not start a window drag, so only a held
+-- physical click drags there. Tap-to-click is untouched. The setting comes
+-- back when the overlay's layer goes away, however it goes.
+local layers = 0
+local saved_tap_and_drag
+
+hl.on("layer.opened", function(layer)
+  if layer.namespace ~= NAMESPACE then return end
+  layers = layers + 1
+  if layers == 1 then
+    saved_tap_and_drag = hl.get_config("input.touchpad.tap_and_drag")
+    if saved_tap_and_drag ~= nil then
+      hl.config({ input = { touchpad = { tap_and_drag = false } } })
+    end
+  end
+end)
+
+hl.on("layer.closed", function(layer)
+  if layer.namespace ~= NAMESPACE or layers == 0 then return end
+  layers = layers - 1
+  if layers == 0 then
+    switching = false
+    if saved_tap_and_drag ~= nil then
+      hl.config({ input = { touchpad = { tap_and_drag = saved_tap_and_drag } } })
+      saved_tap_and_drag = nil
+    end
+  end
+end)
+```
+
+Notes:
+
+- It takes over `Super+Tab` and `Super+Shift+Tab`, which Omarchy binds to
+  "Next workspace" and "Previous workspace". `Super+Ctrl+Tab` is untouched.
+- The switcher cycles the workspace cards and skips the trailing `+` card.
+- Both `Super` keys commit. A release with no switcher session behind it is
+  ignored, so it cannot switch workspace by accident.
+- The second half of the file switches off tap-and-drag while the overview is
+  open, so a tap on a preview clicks it instead of starting a drag; a held
+  physical click still drags. Qt cannot tell a tap from a physical click (a
+  Wayland pointer button carries no source), so the only way to tell them apart
+  is in the compositor. The setting is saved when the overview's layer appears
+  and put back when it goes away, however it goes. Tap-to-click is never
+  touched. To check it on your touchpad, open the overview, tap a preview and
+  at once touch down again and move: it should not drag, while a held physical
+  click should. `hyprctl getoption input:touchpad:tap-and-drag` reads `false`
+  while the overview is open and `true` again once it closes.
+
 ## Keys
 
 | Key | Action |
@@ -96,6 +190,7 @@ hl.gesture({ fingers = 3, direction = "down", action = spaceview("hide") })
 | `Enter` / `Space` | Switch to the selected workspace |
 | `1`–`9`, `0` | Switch to that workspace directly |
 | `Esc` | Close |
+| Hold `Super`, `Tab` / `Shift+Tab` | Step through the workspaces; release `Super` to switch ([setup](#workspace-switcher-supertab)) |
 
 ## Remove
 
@@ -103,19 +198,19 @@ hl.gesture({ fingers = 3, direction = "down", action = spaceview("hide") })
 omarchy plugin remove ecylmz.spaceview --yes
 ```
 
-Then delete the binding or the `hl.gesture(...)` block you added and run
-`hyprctl reload`.
+Then delete the binding, the `hl.gesture(...)` block, or `spaceview.lua` and its
+`require` line, whichever you added, and run `hyprctl reload`.
 
 ## Security
 
 Omarchy plugins run unsandboxed with your user permissions, so review the source
-before installing — it is three QML files and a manifest.
+before installing — it is three QML files, a small JavaScript module and a manifest.
 
 Spaceview ships no binaries and no helper scripts, spawns no processes, and
 opens no sockets. It talks to Hyprland only through Quickshell's
 `Hyprland.dispatch`, validating every window address against
 `^(0x)?[0-9a-fA-F]+$` first, and it never writes to your Hyprland or Omarchy
-configuration — the binding and gesture above are yours to add.
+configuration — the bindings, gesture and `spaceview.lua` above are yours to add.
 [SECURITY.md](SECURITY.md) lists the invariants a change has to keep.
 
 ## Credits
