@@ -343,7 +343,7 @@ BorderSurface {
     tooltipText: "Close workspace and its " + root.windowCount
       + (root.windowCount === 1 ? " window" : " windows")
     foreground: Color.menu.text
-    hoverColor: Color.bar.urgent
+    hoverColor: Color.urgent
     color: Color.menu.background
     onClicked: root.closeRequested()
   }
