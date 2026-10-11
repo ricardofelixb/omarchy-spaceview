@@ -113,26 +113,38 @@ local NAMESPACE = "spaceview" -- the overlay's layer-shell namespace
 -- Super+Shift+Tab to "Previous workspace"; these take their place.
 local switching = false
 
+-- Every hold of Super is one numbered session. The steps and the release are
+-- separate processes with no delivery order, so the overlay uses the number to
+-- match them up. Counting from the clock keeps it ahead of earlier sessions
+-- after a reload.
+local session = os.time() * 1000
+
 local function step(direction)
+  if not switching then session = session + 1 end
   switching = true
-  hl.exec_cmd("omarchy-shell -q shell summon " .. PLUGIN .. " '{\"step\":" .. direction .. "}'")
+  hl.exec_cmd(string.format("omarchy-shell -q shell summon %s '{\"step\":%d,\"session\":%d}'",
+    PLUGIN, direction, session))
 end
 
 -- The overlay ignores a release it has no session for, so a stale one is
--- harmless; the flag only saves the call. Hyprland sees the release even when
--- the overlay has not taken keyboard focus yet, which a quick tap can beat.
+-- harmless; the flag only saves the call.
 local function release()
   if not switching then return end
   switching = false
-  hl.exec_cmd("omarchy-shell -q shell call " .. PLUGIN .. " commitSwitch ''")
+  hl.exec_cmd(string.format("omarchy-shell -q shell call %s commitSwitch '{\"session\":%d}'", PLUGIN, session))
 end
+
+-- Hyprland holds back a modifier's release bind once another bind has fired
+-- under that modifier, which Tab just did; `transparent` stops that. The release
+-- must also match with Shift still down, hence `ignore_mods`.
+local release_flags = { release = true, transparent = true, ignore_mods = true }
 
 hl.unbind("SUPER + TAB")
 hl.unbind("SUPER + SHIFT + TAB")
 o.bind("SUPER + TAB", "Workspace switcher: next", function() step(1) end)
 o.bind("SUPER + SHIFT + TAB", "Workspace switcher: previous", function() step(-1) end)
-hl.bind("SUPER + SUPER_L", release, { release = true })
-hl.bind("SUPER + SUPER_R", release, { release = true })
+hl.bind("SUPER + SUPER_L", release, release_flags)
+hl.bind("SUPER + SUPER_R", release, release_flags)
 
 -- A tap on a preview should click it, not start a window drag, so only a held
 -- physical click drags there. Tap-to-click is untouched. The setting comes
@@ -169,8 +181,13 @@ Notes:
 - It takes over `Super+Tab` and `Super+Shift+Tab`, which Omarchy binds to
   "Next workspace" and "Previous workspace". `Super+Ctrl+Tab` is untouched.
 - The switcher cycles the workspace cards and skips the trailing `+` card.
-- Both `Super` keys commit. A release with no switcher session behind it is
-  ignored, so it cannot switch workspace by accident.
+- Both `Super` keys commit, even with `Shift` still down. A release with no
+  switcher session behind it is ignored, so it cannot switch workspace by
+  accident.
+- Each hold of `Super` is a numbered session, and the steps and the release
+  carry its number. They reach the shell as separate processes with no delivery
+  order; if a quick tap's release lands first, the shell remembers it and the
+  step then switches straight away.
 - The second half of the file switches off tap-and-drag while the overview is
   open, so a tap on a preview clicks it instead of starting a drag; a held
   physical click still drags. Qt cannot tell a tap from a physical click (a
