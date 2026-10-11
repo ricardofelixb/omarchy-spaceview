@@ -130,14 +130,18 @@ Item {
     return null
   }
 
-  // Always show 1..5 so the grid has a stable shape, plus anything else live.
+  // Hide empty workspaces, except the current one so it remains selectable.
   function workspaceIds() {
-    var ids = [1, 2, 3, 4, 5]
+    var ids = []
+    var focused = Hyprland.focusedWorkspace
     var values = Hyprland.workspaces.values
 
     for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+      var workspace = values[i]
+      var id = workspace.id
+      if (id > 0 && id <= 10
+          && (workspace.toplevels.values.length > 0 || (focused && id === focused.id)))
+        ids.push(id)
     }
 
     ids.sort(function(left, right) { return left - right })
@@ -145,9 +149,11 @@ Item {
   }
 
   function nextWorkspaceAfter(ids) {
-    if (!ids || ids.length === 0) return -1
-    var next = ids[ids.length - 1] + 1
-    return next <= 10 ? next : -1
+    // Reuse an empty slot, including when workspace 10 is already occupied.
+    for (var id = 1; id <= 10; id++) {
+      if (ids.indexOf(id) === -1) return id
+    }
+    return -1
   }
 
   function cardIndexAfterMove(index, dx, dy, count, columnCount) {

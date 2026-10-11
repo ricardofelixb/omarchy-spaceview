@@ -21,8 +21,8 @@ Open it with a three-finger swipe, a keyboard shortcut, or both.
   there, with the landing zone highlighted as you drag (dwindle only)
 - Keyboard driven throughout: arrows or `hjkl`, `Enter` to switch, `1`–`9`/`0`
   to jump, `Esc` to close
-- Workspaces 1–10, with 1–5 always shown and a trailing `+` card for the next
-  empty one
+- Occupied workspaces within 1–10, plus the current workspace even if empty,
+  and a trailing `+` card for the first unused slot (unless all ten are shown)
 - Follows your Omarchy theme, since every color is a theme token
 
 ## Requirements
