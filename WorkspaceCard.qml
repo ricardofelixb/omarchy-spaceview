@@ -225,9 +225,9 @@ BorderSurface {
   }
 
   Text {
-    visible: !root.occupied && !root.addWorkspace
+    visible: !root.occupied && !root.addWorkspace && !root.drawer
     anchors.centerIn: previewArea
-    text: root.drawer ? "Drop windows here" : "Empty"
+    text: "Empty"
     textFormat: Text.PlainText
     color: Color.menu.text
     opacity: 0.42
