@@ -46,3 +46,33 @@ test("a pick that no longer exists commits nothing", () => {
   assert.equal(Switcher.commitIndex(true, -1, 5), -1)
   assert.equal(Switcher.commitIndex(true, 0, 0), -1)
 })
+
+// The step and the release reach the shell as separate processes, so nothing
+// orders them. Every Super hold carries a session number and the shell
+// remembers the newest one whose release it has seen.
+
+test("a step is dropped when its own session already committed", () => {
+  // Tab, Tab, release: the release got in between the two steps.
+  assert.equal(Switcher.stepIsLate(7, 7, 7), true)
+})
+
+test("a step still counts while its session has not been released", () => {
+  assert.equal(Switcher.stepIsLate(7, 7, 6), false)
+  assert.equal(Switcher.stepIsLate(8, 7, 7), false)
+})
+
+test("a step with no session is never late", () => {
+  assert.equal(Switcher.stepIsLate(0, 0, 0), false)
+})
+
+test("a release that beat the first step switches as soon as that step arrives", () => {
+  assert.equal(Switcher.releasedAlready(7, 7), true)
+  assert.equal(Switcher.releasedAlready(7, 6), false)
+  assert.equal(Switcher.releasedAlready(0, 7), false)
+})
+
+test("only a release for the live session commits", () => {
+  assert.equal(Switcher.ownsSession(7, 7), true)
+  assert.equal(Switcher.ownsSession(6, 7), false)
+  assert.equal(Switcher.ownsSession(0, 7), true)
+})

@@ -18,3 +18,23 @@ function next(index, direction, count) {
 function commitIndex(switching, index, count) {
   return switching && index >= 0 && index < count ? index : -1
 }
+
+// The step that opens the switcher and the release of Super reach the shell as
+// separate processes, so nothing orders them. Each Super hold carries a session
+// number (0 when a caller sends none) and the shell keeps the newest session
+// whose release it has seen.
+
+// A step that shows up after its own session already committed.
+function stepIsLate(session, activeSession, releasedSession) {
+  return session !== 0 && session === activeSession && session <= releasedSession
+}
+
+// A step whose release got here first: there is nothing left to hold for.
+function releasedAlready(session, releasedSession) {
+  return session !== 0 && session <= releasedSession
+}
+
+// Whether a release belongs to the session that is running.
+function ownsSession(session, activeSession) {
+  return session === 0 || session === activeSession
+}

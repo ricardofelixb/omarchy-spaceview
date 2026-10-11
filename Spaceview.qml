@@ -12,6 +12,8 @@ import "Switcher.js" as Switcher
 // A payload of {"step": 1} or {"step": -1} opens it as a workspace switcher
 // instead (Super+Tab, Super+Shift+Tab): each further step moves the pick, and
 // `commitSwitch`, called when Super is let go, goes to the picked workspace.
+// Both carry the number of the Super hold ("session"), because the two calls
+// are separate processes and the release can arrive first.
 //
 // Hyprland is configured in Lua here, so every dispatch goes through the
 // hl.dsp.* form; the classic "workspace 3" syntax is a Lua syntax error.
@@ -42,6 +44,10 @@ Item {
   property int selectedCardIndex: -1
   // A Super+Tab session is under way: letting go of Super switches workspace.
   property bool switching: false
+  // Doubles: the sessions are numbered from the clock so they stay ahead of any
+  // earlier ones after Hyprland reloads its config.
+  property double activeSession: 0
+  property double releasedSession: 0
 
   readonly property var workspaceModel: root.workspaceIds()
   readonly property int workspaceCount: workspaceModel.length
@@ -172,29 +178,46 @@ Item {
   }
 
   // The "add" card is left out: a switcher cycles workspaces that exist.
-  function stepSwitcher(direction) {
+  function stepSwitcher(direction, session) {
     var from = root.switching ? root.selectedCardIndex : root.focusedCardIndex()
     root.switching = true
+    root.activeSession = session
     root.selectedCardIndex = Switcher.next(from, direction, root.workspaceCount)
+    if (Switcher.releasedAlready(session, root.releasedSession)) root.commitSession(session)
   }
 
-  // Called over IPC when Super is let go. Does nothing unless a session is
+  // Called over IPC when Super is let go. Does nothing unless that session is
   // live, so a stray release (after Esc, or after a gesture opened the
-  // overview) never switches workspace.
-  function commitSwitch() {
-    var index = Switcher.commitIndex(root.switching, root.selectedCardIndex, root.workspaceCount)
-    root.switching = false
+  // overview) never switches workspace. A release that beats its first step is
+  // remembered, and that step then switches straight away.
+  function commitSwitch(payloadJson) {
+    return root.commitSession(root.switchPayload(payloadJson).session)
+  }
+
+  function commitSession(session) {
+    root.releasedSession = Math.max(root.releasedSession, session)
+    var live = root.switching && Switcher.ownsSession(session, root.activeSession)
+    var index = Switcher.commitIndex(live, root.selectedCardIndex, root.workspaceCount)
+    if (live) root.switching = false
     if (index < 0) return "ignored"
     root.activateWorkspace(root.workspaceModel[index])
     return "ok"
   }
 
-  function switchStep(payloadJson) {
+  // The step (1 or -1, else 0) and session number of an IPC payload such as
+  // {"step": 1, "session": 7}; anything unreadable counts as none.
+  function switchPayload(payloadJson) {
+    var payload = null
     try {
-      var step = Number(JSON.parse(payloadJson || "{}").step)
-      return step === 1 || step === -1 ? step : 0
+      payload = JSON.parse(payloadJson || "{}")
     } catch (e) {
-      return 0
+    }
+    if (payload === null || typeof payload !== "object") payload = {}
+    var step = Number(payload.step)
+    var session = Number(payload.session)
+    return {
+      step: step === 1 || step === -1 ? step : 0,
+      session: isFinite(session) && session > 0 ? session : 0
     }
   }
 
@@ -258,11 +281,15 @@ Item {
   }
 
   function open(payloadJson) {
-    var step = root.switchStep(payloadJson)
+    var request = root.switchPayload(payloadJson)
+    var step = request.step
+
+    // Its Super was let go and already switched: nothing to open.
+    if (step !== 0 && Switcher.stepIsLate(request.session, root.activeSession, root.releasedSession)) return
 
     // Already showing: another Tab just moves the pick.
     if (step !== 0 && root.opened) {
-      root.stepSwitcher(step)
+      root.stepSwitcher(step, request.session)
       return
     }
 
@@ -276,7 +303,7 @@ Item {
     root.selectedCardIndex = root.initialSelectedCardIndex()
     root.switching = false
     root.opened = true
-    if (step !== 0) root.stepSwitcher(step)
+    if (step !== 0) root.stepSwitcher(step, request.session)
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
