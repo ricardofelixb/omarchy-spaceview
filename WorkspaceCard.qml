@@ -333,6 +333,9 @@ BorderSurface {
   HoverHandler { id: cardHover }
 
   PanelActionButton {
+    id: closeButton
+    property bool pointerHovered: false
+    onHovered: function(isHovered) { pointerHovered = isHovered }
     anchors.top: parent.top
     anchors.right: parent.right
     anchors.margins: Style.spacing.sm
@@ -344,13 +347,19 @@ BorderSurface {
     enabled: revealed
     Behavior on opacity { NumberAnimation { duration: 90 } }
     iconText: "×"
-    fontSize: Style.font.icon * 1.2
-    tooltipText: "Close workspace and its " + root.windowCount
-      + (root.windowCount === 1 ? " window" : " windows")
+    fontSize: Style.font.icon * 1.6
     foreground: Color.menu.text
     hoverColor: Color.urgent
     color: "transparent"
     onClicked: root.closeRequested()
+
+    PanelToolTip {
+      visible: closeButton.pointerHovered && closeButton.enabled
+      text: "Close workspace and its " + root.windowCount
+        + (root.windowCount === 1 ? " window" : " windows")
+      x: (closeButton.width - width) / 2
+      y: -height - Style.space(16)
+    }
   }
 
   DropArea {
