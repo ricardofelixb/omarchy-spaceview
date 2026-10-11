@@ -87,8 +87,9 @@ Item {
     - reservedInsets.left - reservedInsets.right - outerMargin * 2)
   readonly property real availableHeight: Math.max(1, panel.height
     - reservedInsets.top - reservedInsets.bottom - outerMargin * 2)
+  // Keep up to three cards on one row; cardWidth scales them to fit.
   readonly property int columns: Math.max(1, Math.min(cardCount,
-    Math.ceil(Math.sqrt(cardCount * availableWidth / availableHeight / cardAspectRatio))))
+    Math.max(3, Math.ceil(Math.sqrt(cardCount * availableWidth / availableHeight / cardAspectRatio)))))
   readonly property int rows: Math.max(1, Math.ceil(cardCount / columns))
   readonly property real cardWidth: Math.max(1, Math.min(
     Style.space(520),
