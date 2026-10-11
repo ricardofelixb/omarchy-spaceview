@@ -48,7 +48,7 @@ Item {
   readonly property var drawerWorkspace: root.findDrawerWorkspace()
   readonly property int gridCardCount: overviewCardModel.length
   readonly property int cardCount: gridCardCount + 1
-  readonly property real drawerHeight: Math.min(Style.space(170), availableHeight * 0.24)
+  readonly property real drawerHeight: Math.min(Style.space(85), availableHeight * 0.12)
   readonly property real drawerSpace: drawerHeight + gridSpacing
   readonly property var defaultMonitorBounds: root.monitorBoundsFor(-1)
   readonly property real cardAspectRatio: defaultMonitorBounds && defaultMonitorBounds.height > 0
@@ -529,7 +529,7 @@ Item {
         anchors.top: workspaceGrid.bottom
         anchors.topMargin: root.gridSpacing
         anchors.horizontalCenter: workspaceGrid.horizontalCenter
-        width: Math.min(root.availableWidth, root.drawerHeight * root.cardAspectRatio)
+        width: workspaceGrid.width
         height: root.drawerHeight
         drawer: true
         workspaceId: root.drawerWorkspace ? root.drawerWorkspace.id : -1

@@ -32,6 +32,14 @@ BorderSurface {
     var usable = bounds && bounds.width > 0 && bounds.height > 0
     var rects = []
 
+    // Stored windows are individual thumbnails, not a miniature desktop.
+    if (root.drawer) {
+      for (var d = 0; d < windows.length; d++)
+        rects.push({ x: d / windows.length, y: 0,
+          width: 1 / windows.length, height: 1, floating: false })
+      return rects
+    }
+
     var resolved = 0
 
     for (var i = 0; i < windows.length; i++) {
@@ -133,7 +141,9 @@ BorderSurface {
   readonly property bool dropHovered: foreignDrag && dropArea.containsDrag
     && root.dropTargetPreview === null
   readonly property real accentBorderWidth: Math.max(Style.space(2), Style.focusBorderWidth)
-  readonly property var normalBorderSpec: focused
+  readonly property var normalBorderSpec: drawer
+    ? Border.flat(keyboardSelected ? Color.accent : "transparent", keyboardSelected ? root.accentBorderWidth : 0)
+    : focused
     ? Border.flat(Color.accent, root.accentBorderWidth)
     : (keyboardSelected
       ? Border.withWidth(Border.controlSpec("hover-cursor", Color.menu.text, Color.accent), Math.max(1, Style.hoverBorderWidth))
@@ -192,8 +202,9 @@ BorderSurface {
   signal windowDragMoved(point scenePosition)
 
   radius: Style.cornerRadius
-  color: focused
-    ? Color.menu.background
+  color: drawer
+    ? Util.alpha(Color.menu.background, 0.4)
+    : focused ? Color.menu.background
     : (occupied ? Util.alpha(Color.menu.background, 0.82) : Util.alpha(Color.menu.background, 0.62))
   borderSpec: dropHovered
     ? Border.withWidth(Border.controlSpec("focus", Color.menu.text, Color.accent), Math.max(Style.space(2), Style.focusBorderWidth))
@@ -236,11 +247,12 @@ BorderSurface {
   }
 
   Row {
+    id: drawerLabel
     visible: root.drawer
     z: 6
-    anchors.top: parent.top
-    anchors.topMargin: Style.spacing.sm
-    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.left: parent.left
+    anchors.leftMargin: Style.spacing.md
+    anchors.verticalCenter: parent.verticalCenter
     spacing: Style.spacing.sm
 
     Rectangle {
@@ -274,18 +286,19 @@ BorderSurface {
     z: 5
     anchors.fill: parent
     anchors.margins: Style.spacing.md
-    anchors.topMargin: root.drawer ? Style.font.body + Style.spacing.sm * 2 : Style.spacing.md
+    anchors.leftMargin: root.drawer ? drawerLabel.width + Style.spacing.md * 2 : Style.spacing.md
 
     // The stage keeps the monitor's aspect ratio, so a tall split reads as a
     // tall split instead of being stretched to the card.
     Item {
       id: stage
-      width: root.snap(Math.min(parent.width, parent.height * root.monitorAspect))
-      height: root.snap(width / root.monitorAspect)
-      x: root.snap((parent.width - width) / 2)
+      width: root.snap(Math.min(parent.width,
+        parent.height * root.monitorAspect * (root.drawer ? Math.max(1, root.windowCount) : 1)))
+      height: root.snap(root.drawer ? parent.height : width / root.monitorAspect)
+      x: root.drawer ? 0 : root.snap((parent.width - width) / 2)
       y: root.snap((parent.height - height) / 2)
 
-      readonly property real inset: Math.max(1, Style.space(2)) / 2
+      readonly property real inset: root.drawer ? Style.spacing.sm / 2 : Math.max(1, Style.space(2)) / 2
 
       Repeater {
         model: root.toplevelModel

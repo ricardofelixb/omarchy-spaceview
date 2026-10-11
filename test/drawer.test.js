@@ -130,6 +130,25 @@ test('scratchpad events refresh monitor state even when the overview is closed',
   assert.equal(refreshes, 2);
 });
 
+test('drawer windows form a non-overlapping thumbnail row regardless of desktop geometry', () => {
+  const card = fs.readFileSync(`${__dirname}/../WorkspaceCard.qml`, 'utf8');
+  const layout = card.match(/readonly property var layoutRects: (\{[^]*?\n  \})/);
+  assert.ok(layout);
+  for (const count of [0, 1, 2, 8]) {
+    const root = { drawer: true, monitorBounds: null,
+      workspace: { toplevels: { values: Array.from({ length: count }, () => ({})) } },
+    };
+    const rects = vm.runInNewContext(`(function() ${layout[1]})()`, { root });
+    assert.equal(rects.length, count);
+    for (let i = 0; i < count; i++) {
+      assert.equal(rects[i].x, i / count);
+      assert.equal(rects[i].width, 1 / count);
+      assert.equal(rects[i].y, 0);
+      assert.equal(rects[i].height, 1);
+    }
+  }
+});
+
 test('keyboard reaches the empty drawer row without confusing it with +', () => {
   const { root, calls } = setup();
   root.selectedCardIndex = 1;
