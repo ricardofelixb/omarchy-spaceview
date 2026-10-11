@@ -34,12 +34,12 @@ Open it with a trackpad swipe, a keyboard shortcut, or both.
 
 No external binaries, services, or network access.
 
-## Install this fork's preview branch
+## Install this fork
 
-Until the preview is merged, install the branch explicitly:
+Install the merged version from `main`:
 
 ```bash
-git clone --branch work/spaceview-clean-cards --single-branch \
+git clone --branch main --single-branch \
   https://github.com/ricardofelixb/omarchy-spaceview.git \
   ~/.config/omarchy/plugins/ecylmz.spaceview
 omarchy plugin enable ecylmz.spaceview
