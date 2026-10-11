@@ -76,8 +76,9 @@ Item {
     - reservedInsets.left - reservedInsets.right - outerMargin * 2)
   readonly property real availableHeight: Math.max(1, panel.height
     - reservedInsets.top - reservedInsets.bottom - outerMargin * 2)
+  // Keep up to three cards on one row; cardWidth scales them to fit.
   readonly property int columns: Math.max(1, Math.min(cardCount,
-    Math.ceil(Math.sqrt(cardCount * availableWidth / availableHeight / cardAspectRatio))))
+    Math.max(3, Math.ceil(Math.sqrt(cardCount * availableWidth / availableHeight / cardAspectRatio)))))
   readonly property int rows: Math.max(1, Math.ceil(cardCount / columns))
   readonly property real cardWidth: Math.max(1, Math.min(
     Style.space(520),
@@ -119,14 +120,18 @@ Item {
     return null
   }
 
-  // Always show 1..5 so the grid has a stable shape, plus anything else live.
+  // Hide empty workspaces, except the current one so it remains selectable.
   function workspaceIds() {
-    var ids = [1, 2, 3, 4, 5]
+    var ids = []
+    var focused = Hyprland.focusedWorkspace
     var values = Hyprland.workspaces.values
 
     for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+      var workspace = values[i]
+      var id = workspace.id
+      if (id > 0 && id <= 10
+          && (workspace.toplevels.values.length > 0 || (focused && id === focused.id)))
+        ids.push(id)
     }
 
     ids.sort(function(left, right) { return left - right })
@@ -134,9 +139,11 @@ Item {
   }
 
   function nextWorkspaceAfter(ids) {
-    if (!ids || ids.length === 0) return -1
-    var next = ids[ids.length - 1] + 1
-    return next <= 10 ? next : -1
+    // Reuse an empty slot, including when workspace 10 is already occupied.
+    for (var id = 1; id <= 10; id++) {
+      if (ids.indexOf(id) === -1) return id
+    }
+    return -1
   }
 
   function cardIndexAfterMove(index, dx, dy, count, columnCount) {
@@ -153,12 +160,14 @@ Item {
     return Math.min(targetRow * cols + column, count - 1)
   }
 
-  function initialSelectedCardIndex() {
+  function focusedCardIndex() {
     var focused = Hyprland.focusedWorkspace
-    if (focused) {
-      var index = root.workspaceModel.indexOf(focused.id)
-      if (index >= 0) return index
-    }
+    return focused ? root.workspaceModel.indexOf(focused.id) : -1
+  }
+
+  function initialSelectedCardIndex() {
+    var index = root.focusedCardIndex()
+    if (index >= 0) return index
     return root.cardCount > 0 ? 0 : -1
   }
 
@@ -221,7 +230,7 @@ Item {
     }
   }
 
-  function open(payloadJson) {
+  function open() {
     Hyprland.refreshToplevels()
     Hyprland.refreshWorkspaces()
     rescueTimer.restart()
