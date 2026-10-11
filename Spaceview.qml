@@ -29,6 +29,7 @@ Item {
     "activespecial", "activespecialv2", "changefloatingmode", "fullscreen", "togglegroup", "moveintogroup", "moveoutofgroup"
   ]
   property var pendingReposition: null
+  property var pendingActivation: null
   // What the user asked for while a reposition was still in flight, so
   // finishing that move does not drag them back to where they started.
   property int requestedWorkspaceId: -1
@@ -143,9 +144,10 @@ Item {
 
   function activateDrawer() {
     root.flushPendingReposition()
-    if (!root.drawerIsOpen())
-      Hyprland.dispatch('hl.dsp.workspace.toggle_special("scratchpad")')
-    Qt.callLater(root.dismiss)
+    root.dismissThenActivate(function() {
+      if (!root.drawerIsOpen())
+        Hyprland.dispatch('hl.dsp.workspace.toggle_special("scratchpad")')
+    })
   }
 
   function moveWindowToDrawer(toplevel) {
@@ -281,6 +283,7 @@ Item {
   }
 
   function open() {
+    root.pendingActivation = null
     Hyprland.refreshToplevels()
     Hyprland.refreshWorkspaces()
     Hyprland.refreshMonitors()
@@ -310,11 +313,25 @@ Item {
       root.shell.hide((root.manifest && root.manifest.id) || "ecylmz.spaceview")
   }
 
+  // Window focus is refused while the overlay owns an exclusive keyboard
+  // grab. Wait for the compositor's unmap event, not an arbitrary delay or
+  // Qt.callLater (which need not wait for the Wayland unmap to be processed).
+  function dismissThenActivate(action) {
+    if (root.opened && panel.visible) {
+      root.pendingActivation = action
+      root.dismiss()
+    } else {
+      root.dismiss()
+      action()
+    }
+  }
+
   function activateWorkspace(workspaceId) {
     if (workspaceId <= 0 || workspaceId > 10) return
     root.requestedWorkspaceId = workspaceId
-    Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + workspaceId + "\" })")
-    Qt.callLater(root.dismiss)
+    root.dismissThenActivate(function() {
+      Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + workspaceId + "\" })")
+    })
   }
 
   function closeWorkspace(workspaceId) {
@@ -344,13 +361,15 @@ Item {
     var address = root.normalizedAddress(toplevel)
     if (address) {
       root.requestedWindowAddress = address
-      Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + address + "\" })")
+      root.dismissThenActivate(function() {
+        Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + address + "\" })")
+      })
     }
-    else if (toplevel && toplevel.wayland)
-      toplevel.wayland.activate()
-    else
-      return
-    Qt.callLater(root.dismiss)
+    else if (toplevel && toplevel.wayland) {
+      root.dismissThenActivate(function() {
+        if (toplevel && toplevel.wayland) toplevel.wayland.activate()
+      })
+    }
   }
 
   function moveWindowToWorkspace(toplevel, workspaceId) {
@@ -588,6 +607,12 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       var name = String(event && event.name ? event.name : "").toLowerCase()
+      if (name === "closelayer" && event.data === "spaceview"
+          && !root.opened && root.pendingActivation) {
+        var action = root.pendingActivation
+        root.pendingActivation = null
+        action()
+      }
       // Quickshell does not refresh monitor IPC state on scratchpad toggles.
       // Keep it current even while closed, so reopening an open drawer never
       // mistakes it for a hidden one and toggles it off.

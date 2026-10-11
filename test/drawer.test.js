@@ -7,7 +7,7 @@ const qml = fs.readFileSync(`${__dirname}/../Spaceview.qml`, 'utf8');
 const names = ['findDrawerWorkspace', 'drawerIsOpen', 'activateDrawer',
   'normalizedAddress', 'moveWindowToDrawer', 'sourceWorkspaceId',
   'moveWindowToWorkspace', 'moveCardSelection', 'cardIndexAfterMove',
-  'activateSelectedCard'];
+  'activateSelectedCard', 'dismissThenActivate', 'activateWindow', 'activateWorkspace', 'open'];
 const functions = names.map(name => {
   const match = qml.match(new RegExp(`  function ${name}\\([^]*?\\n  \\}`));
   assert.ok(match, `QML function ${name} exists`);
@@ -16,19 +16,69 @@ const functions = names.map(name => {
 
 function setup(workspaces = []) {
   const calls = [];
-  const root = { refreshSoon() {}, flushPendingReposition() {}, dismiss() {},
+  const panel = { visible: true };
+  const root = { refreshSoon() {}, flushPendingReposition() {},
+    focusedScreen() {}, initialSelectedCardIndex() { return 0; },
+    opened: false, pendingActivation: null, layoutEvents: [],
+    dismiss() { this.opened = false; panel.visible = false; },
     showDrawer: true, gridCardCount: 3, cardCount: 4, columns: 3, rows: 1,
     workspaceCount: 2, nextWorkspaceId: 3, overviewCardModel: [1, 2, 3],
-    activateWorkspace(id) { calls.push(id); },
   };
   const Hyprland = { workspaces: { values: workspaces }, focusedMonitor: {
     lastIpcObject: { specialWorkspace: { name: '' } },
-  }, dispatch(command) { calls.push(command); } };
-  const context = vm.createContext({ root, Hyprland, Qt: { callLater(fn) { fn(); } } });
+  }, dispatch(command) { calls.push(command); },
+    refreshMonitors() {}, refreshToplevels() {}, refreshWorkspaces() {},
+  };
+  const context = vm.createContext({ root, panel, Hyprland, Qt: { callLater(fn) { fn(); } },
+    rescueTimer: { restart() {} }, keyCatcher: { forceActiveFocus() {} },
+  });
   vm.runInContext(functions, context);
+  vm.runInContext(qml.match(/    function onRawEvent\([^]*?\n    \}/)[0], context);
   for (const name of names) root[name] = context[name];
-  return { root, Hyprland, calls };
+  return { root, Hyprland, calls, event: context.onRawEvent };
 }
+
+test('window selection waits for its layer to close and activates exactly once', () => {
+  const { root, calls, event } = setup();
+  root.opened = true;
+  root.activateWindow({ address: 'abc123' });
+  assert.equal(root.opened, false);
+  assert.equal(calls.length, 0, 'focus must not be dispatched under the exclusive grab');
+  event({ name: 'closelayer', data: 'some-other-overlay' });
+  assert.equal(calls.length, 0);
+  event({ name: 'closelayer', data: 'spaceview' });
+  assert.deepEqual(calls, ['hl.dsp.focus({ window = "address:0xabc123" })']);
+  event({ name: 'closelayer', data: 'spaceview' });
+  assert.equal(calls.length, 1);
+  assert.equal(root.pendingActivation, null);
+});
+
+test('workspace, drawer, and Wayland fallback activation also wait for unmap', () => {
+  for (const kind of ['workspace', 'drawer', 'wayland']) {
+    const { root, calls, event } = setup();
+    root.opened = true;
+    if (kind === 'workspace') root.activateWorkspace(2);
+    else if (kind === 'drawer') root.activateDrawer();
+    else root.activateWindow({ wayland: { activate() { calls.push('wayland'); } } });
+    assert.equal(calls.length, 0, kind);
+    event({ name: 'closelayer', data: 'spaceview' });
+    assert.equal(calls.length, 1, kind);
+  }
+});
+
+test('closing without selection or receiving an old close while reopened does not focus', () => {
+  const { root, calls, event } = setup();
+  root.dismiss();
+  event({ name: 'closelayer', data: 'spaceview' });
+  assert.equal(calls.length, 0);
+  root.pendingActivation = () => calls.push('stale');
+  root.open();
+  assert.equal(root.pendingActivation, null);
+  event({ name: 'closelayer', data: 'spaceview' });
+  root.dismiss();
+  event({ name: 'closelayer', data: 'spaceview' });
+  assert.equal(calls.length, 0);
+});
 
 test('only the named scratchpad is a drawer, never the reposition parking workspace', () => {
   const parking = { id: -2, lastIpcObject: { name: 'special:spaceview-move' } };
@@ -92,7 +142,7 @@ test('keyboard reaches the separate drawer row without confusing it with +', () 
   root.moveCardSelection(0, -1);
   assert.equal(root.selectedCardIndex, 2);
   root.activateSelectedCard();
-  assert.equal(calls[1], 3);
+  assert.equal(calls[1], 'hl.dsp.focus({ workspace = "3" })');
   root.showDrawer = false;
   root.moveCardSelection(0, 1);
   assert.equal(root.selectedCardIndex, 2);
