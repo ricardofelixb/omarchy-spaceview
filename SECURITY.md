@@ -3,7 +3,7 @@
 ## Scope
 
 Spaceview is a read-mostly overlay: it renders Hyprland's workspaces and windows
-and asks Hyprland to focus or move them. Reports involving command or argument
+and asks Hyprland to focus, move, or normally close them. Reports involving command or argument
 injection into Hyprland dispatches, a window left stranded on the hidden parking
 workspace, or a keyboard grab that outlives the overlay are security-sensitive.
 
@@ -22,6 +22,9 @@ Changes should preserve these invariants:
   `special:scratchpad` drawer and the plugin's own `special:spaceview-move`
   parking workspace. Drawer discovery matches its name, not an arbitrary
   negative workspace id; it never exposes the parking workspace.
+- Workspace close snapshots and validates addresses from that workspace only,
+  then sends ordinary close requests. Never force-kill, and never close drawer
+  windows through the workspace close action.
 - A window parked for repositioning is always brought back: on the timer, when
   another reposition starts, when the overlay closes, and — as a safety net for
   a session that was cut short — when it next opens.

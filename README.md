@@ -16,6 +16,9 @@ Open it with a trackpad swipe, a keyboard shortcut, or both.
 - Live Wayland window previews, falling back to the app icon while a window has
   no frame yet
 - Click a window to focus it, click a workspace to switch to it
+- Hover a workspace card and click `×` to request closing all its windows,
+  without an extra confirmation. Apps can still prompt about unsaved changes;
+  nothing is force-killed. The drawer and `+` have no close button.
 - Drag a window between workspaces, or within one to rearrange it: drop it on
   the left, right, top, or bottom half of another window to land it exactly
   there, with the landing zone highlighted as you drag (dwindle only)

@@ -317,6 +317,29 @@ Item {
     Qt.callLater(root.dismiss)
   }
 
+  function closeWorkspace(workspaceId) {
+    if (workspaceId <= 0 || workspaceId > 10) return
+    var workspace = root.workspaceById(workspaceId)
+    if (!workspace) return
+
+    // Snapshot validated addresses: a close can destroy its model entry, and
+    // apps may keep a window open to ask about unsaved work. Never force-kill.
+    var windows = workspace.toplevels.values.slice()
+    var pending = root.pendingReposition
+    if (pending && pending.workspaceId === workspaceId)
+      windows.push({ address: pending.address })
+    root.flushPendingReposition()
+
+    var addresses = []
+    for (var i = 0; i < windows.length; i++) {
+      var address = root.normalizedAddress(windows[i])
+      if (address && addresses.indexOf(address) === -1) addresses.push(address)
+    }
+    for (var j = 0; j < addresses.length; j++)
+      Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + addresses[j] + '" })')
+    root.refreshSoon()
+  }
+
   function activateWindow(toplevel) {
     var address = root.normalizedAddress(toplevel)
     if (address) {
@@ -540,6 +563,7 @@ Item {
             focused: !isAddCard && Hyprland.focusedWorkspace !== null
               && Hyprland.focusedWorkspace.id === modelData
             onWorkspaceActivated: root.activateWorkspace(modelData)
+            onCloseRequested: root.closeWorkspace(modelData)
             onWindowActivated: function(toplevel) { root.activateWindow(toplevel) }
             onWindowDragStarted: function(toplevel) { root.beginWindowDrag(toplevel) }
             onWindowDragMoved: function(scenePosition) { root.dragScenePosition = scenePosition }

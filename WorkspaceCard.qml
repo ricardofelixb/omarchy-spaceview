@@ -183,6 +183,7 @@ BorderSurface {
   }
 
   signal workspaceActivated()
+  signal closeRequested()
   signal windowActivated(var toplevel)
   signal windowDragStarted(var toplevel)
   signal windowDragFinished(var toplevel)
@@ -327,6 +328,24 @@ BorderSurface {
     font.pixelSize: Style.font.displayLarge
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
+  }
+
+  HoverHandler { id: cardHover }
+
+  PanelActionButton {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: Style.spacing.sm
+    z: 30
+    visible: cardHover.hovered && root.occupied && !root.drawer
+      && !root.addWorkspace && !root.dragActive
+    iconText: "×"
+    tooltipText: "Close workspace and its " + root.windowCount
+      + (root.windowCount === 1 ? " window" : " windows")
+    foreground: Color.menu.text
+    hoverColor: Color.bar.urgent
+    color: Color.menu.background
+    onClicked: root.closeRequested()
   }
 
   DropArea {
