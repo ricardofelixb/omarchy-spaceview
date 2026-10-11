@@ -26,9 +26,11 @@ Open it with a trackpad swipe, a keyboard shortcut, or both.
   to jump, `Esc` to close
 - Occupied workspaces within 1–10, plus the current workspace even if empty,
   and a trailing `+` card for the first unused slot (unless all ten are shown)
-- A separate **Drawer** card below the workspaces shows the Super+S scratchpad
-  when occupied, or appears as a drop target while dragging. Drag windows in to
-  put them away, or back onto a workspace (including `+`) to take them out.
+- A shallow **Drawer** tray below the workspaces always shows the Super+S
+  scratchpad, even when empty. Its label sits beside a row of window thumbnails,
+  keeping the layout and drop target stable. Drag
+  windows in to put them away, or back onto a workspace (including `+`) to take
+  them out.
   Click the card to show the drawer, or click a preview to focus that window.
   Arrow down from the last workspace row selects it; Enter opens it.
 - Up to three workspace cards fit on one row

@@ -46,12 +46,10 @@ Item {
     return ids
   }
   readonly property var drawerWorkspace: root.findDrawerWorkspace()
-  readonly property bool showDrawer: (drawerWorkspace !== null
-    && drawerWorkspace.toplevels.values.length > 0) || draggedToplevel !== null
   readonly property int gridCardCount: overviewCardModel.length
-  readonly property int cardCount: gridCardCount + (showDrawer ? 1 : 0)
-  readonly property real drawerHeight: Math.min(Style.space(170), availableHeight * 0.24)
-  readonly property real drawerSpace: showDrawer ? drawerHeight + gridSpacing : 0
+  readonly property int cardCount: gridCardCount + 1
+  readonly property real drawerHeight: Math.min(Style.space(85), availableHeight * 0.12)
+  readonly property real drawerSpace: drawerHeight + gridSpacing
   readonly property var defaultMonitorBounds: root.monitorBoundsFor(-1)
   readonly property real cardAspectRatio: defaultMonitorBounds && defaultMonitorBounds.height > 0
     ? defaultMonitorBounds.width / defaultMonitorBounds.height : 1.55
@@ -207,7 +205,7 @@ Item {
   }
 
   function initialSelectedCardIndex() {
-    if (root.showDrawer && root.drawerIsOpen()) return root.gridCardCount
+    if (root.drawerIsOpen()) return root.gridCardCount
     var index = root.focusedCardIndex()
     if (index >= 0) return index
     return root.cardCount > 0 ? 0 : -1
@@ -215,9 +213,9 @@ Item {
 
   function moveCardSelection(dx, dy) {
     var index = root.selectedCardIndex
-    if (root.showDrawer && index === root.gridCardCount) {
+    if (index === root.gridCardCount) {
       if (dy < 0) root.selectedCardIndex = root.gridCardCount - 1
-    } else if (root.showDrawer && dy > 0
+    } else if (dy > 0
         && Math.floor(index / root.columns) === root.rows - 1) {
       root.selectedCardIndex = root.gridCardCount
     } else {
@@ -229,7 +227,7 @@ Item {
   function activateSelectedCard() {
     var index = root.selectedCardIndex
     if (index < 0 || index >= root.cardCount) return
-    if (root.showDrawer && index === root.gridCardCount)
+    if (index === root.gridCardCount)
       root.activateDrawer()
     else if (root.nextWorkspaceId > 0 && index === root.workspaceCount)
       root.activateWorkspace(root.nextWorkspaceId)
@@ -528,11 +526,10 @@ Item {
       }
 
       WorkspaceCard {
-        visible: root.showDrawer
         anchors.top: workspaceGrid.bottom
         anchors.topMargin: root.gridSpacing
         anchors.horizontalCenter: workspaceGrid.horizontalCenter
-        width: Math.min(root.availableWidth, root.drawerHeight * root.cardAspectRatio)
+        width: workspaceGrid.width
         height: root.drawerHeight
         drawer: true
         workspaceId: root.drawerWorkspace ? root.drawerWorkspace.id : -1
