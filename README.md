@@ -119,19 +119,22 @@ local switching = false
 -- after a reload.
 local session = os.time() * 1000
 
--- How far this hold's Tabs have moved the pick (Shift+Tab counts -1). The
--- release carries it, so it can finish any step that has not got there yet.
+-- How far this hold's Tabs have moved the pick (Shift+Tab counts -1), and which
+-- way the first one went. Every call carries the second, and the release the
+-- first, so it can finish any step that has not got there yet.
 local offset = 0
+local first = 0
 
 local function step(direction)
   if not switching then
     session = session + 1
     offset = 0
+    first = direction
   end
   switching = true
   offset = offset + direction
-  hl.exec_cmd(string.format("omarchy-shell -q shell summon %s '{\"step\":%d,\"session\":%d}'",
-    PLUGIN, direction, session))
+  hl.exec_cmd(string.format("omarchy-shell -q shell summon %s '{\"step\":%d,\"session\":%d,\"first\":%d}'",
+    PLUGIN, direction, session, first))
 end
 
 -- The overlay ignores a release that is not for the session it is running, so
@@ -139,8 +142,8 @@ end
 local function release()
   if not switching then return end
   switching = false
-  hl.exec_cmd(string.format("omarchy-shell -q shell call %s commitSwitch '{\"session\":%d,\"offset\":%d}'",
-    PLUGIN, session, offset))
+  hl.exec_cmd(string.format("omarchy-shell -q shell call %s commitSwitch '{\"session\":%d,\"first\":%d,\"offset\":%d}'",
+    PLUGIN, session, first, offset))
 end
 
 -- Hyprland holds back a modifier's release bind once another bind has fired
@@ -195,10 +198,11 @@ Notes:
   accident.
 - Each hold of `Super` is a numbered session. The steps and the release reach
   the shell as separate processes with no delivery order, so each carries the
-  session number and the release also says how far the Tabs moved the pick. The
-  release finishes any step that has not arrived yet, and one that lands before
-  its first step switches by itself. A step of a session that is over (switched,
-  cancelled with `Esc`, or older than the running one) is dropped.
+  session number and which way the first `Tab` went, and the release also says
+  how far the `Tab`s moved the pick. The release finishes any step that has not
+  arrived yet, and one that lands before its first step switches by itself. A
+  step of a session that is over (switched, cancelled with `Esc`, or older than
+  the running one) is dropped.
 - The second half of the file switches off tap-and-drag while the overview is
   open, so a tap on a preview clicks it instead of starting a drag; a held
   physical click still drags. Qt cannot tell a tap from a physical click (a

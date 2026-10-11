@@ -22,19 +22,19 @@ test("Shift+Tab steps back and wraps at the start", () => {
   assert.equal(Switcher.next(0, -1, 5), 4)
 })
 
-test("an unknown start lands on the first card going forward, the last going back", () => {
-  assert.equal(Switcher.next(-1, 1, 5), 0)
-  assert.equal(Switcher.next(-1, -1, 5), 4)
-  assert.equal(Switcher.next(-1, 2, 5), 1)
-  assert.equal(Switcher.next(-1, -2, 5), 3)
-})
-
 test("several steps at once land where the same steps one by one would", () => {
   assert.equal(Switcher.next(2, 2, 5), 4)
   assert.equal(Switcher.next(4, 7, 5), 1)
   assert.equal(Switcher.next(1, -3, 5), 3)
   assert.equal(Switcher.next(2, 0, 5), 2)
-  assert.equal(Switcher.next(-1, 0, 5), -1)
+})
+
+test("a focused workspace with no card enters at the first card going forward, the last going back", () => {
+  // The count starts just before the first card for Tab and on it for Shift+Tab.
+  assert.equal(Switcher.next(Switcher.origin(-1, 1), 1, 5), 0)
+  assert.equal(Switcher.next(Switcher.origin(-1, -1), -1, 5), 4)
+  assert.equal(Switcher.origin(3, 1), 3)
+  assert.equal(Switcher.origin(3, -1), 3)
 })
 
 test("no cards, nowhere to step", () => {
@@ -53,19 +53,20 @@ test("a pick that no longer exists commits nothing", () => {
 // the release says how far the Tabs moved the pick (`offset`), so it can finish
 // any step that has not arrived yet. These replay the orders that went wrong.
 
-// One shell: workspace 1 focused of five cards, like the overlay's own state.
+// One shell: the first of five cards focused (or none, with -1), like the overlay's own state.
 function rig(focused = 0, count = 5) {
   const s = Switcher.create()
   let selected = -1
   return {
     count,
-    step(session, direction) {
+    // `first` is the direction of the hold's first Tab, which every call carries.
+    step(session, direction, first = direction) {
       if (Switcher.stepIsStale(s, session)) return null // the overlay is not even opened for it
-      selected = Switcher.step(s, session, direction, selected, focused, count)
+      selected = Switcher.step(s, session, direction, first, selected, focused, count)
       return selected
     },
-    release(session, offset = null) {
-      return Switcher.release(s, session, offset, selected, focused, count)
+    release(session, offset = null, first = 0) {
+      return Switcher.release(s, session, offset, first, selected, focused, count)
     },
     close() { // Esc, a click, or a commit
       Switcher.end(s)
@@ -164,6 +165,53 @@ test("a new hold starts from the focused card, not where the last one stopped", 
 
 test("a workspace that closes while Super is held commits nothing", () => {
   const s = Switcher.create()
-  Switcher.step(s, 7, 1, -1, 3, 5)
-  assert.equal(Switcher.release(s, 7, 1, 4, 3, 4), -1) // a workspace closed meanwhile
+  Switcher.step(s, 7, 1, 1, -1, 3, 5)
+  assert.equal(Switcher.release(s, 7, 1, 1, 4, 3, 4), -1) // a workspace closed meanwhile
+})
+
+// The count only has a start when the focused workspace has a card. Without
+// one, it depends on which way the first Tab went, which a net offset forgets,
+// so every call carries that direction too.
+
+test("from a workspace with no card, Tab then Shift+Tab lands on the last card whatever the order", () => {
+  for (const order of [["a", "b", "r"], ["r", "a", "b"], ["b", "a", "r"], ["a", "r", "b"], ["b", "r", "a"], ["r", "b", "a"]]) {
+    const sw = rig(-1)
+    let got = null
+    for (const m of order) {
+      if (m === "r") got = sw.release(7, 0, 1)
+      else sw.step(7, m === "a" ? 1 : -1, 1) // Tab, then Shift+Tab; `first` is Tab's
+    }
+    assert.equal(got, 4, order.join())
+  }
+})
+
+function permutations(items) {
+  if (items.length <= 1) return [items]
+  return items.flatMap((item, i) =>
+    permutations([...items.slice(0, i), ...items.slice(i + 1)]).map(rest => [item, ...rest]))
+}
+
+test("one hold picks the same card whatever order its Tabs and release arrive in", () => {
+  const count = 5
+  const holds = [[1], [-1], [1, 1], [1, -1], [-1, 1], [-1, -1], [1, 1, -1], [1, -1, -1], [-1, 1, 1], [-1, -1, 1]]
+  for (const focused of [-1, 0, 3]) {
+    for (const directions of holds) {
+      // What pressing the keys one by one would pick.
+      let expected = focused
+      for (const d of directions)
+        expected = expected < 0 ? (d > 0 ? 0 : count - 1) : (expected + d + count) % count
+      const first = directions[0]
+      const offset = directions.reduce((a, b) => a + b, 0)
+      const release = directions.length // message number of the release
+      for (const order of permutations([...directions.keys(), release])) {
+        const sw = rig(focused, count)
+        let got = null
+        for (const m of order) {
+          if (m === release) got = sw.release(7, offset, first)
+          else sw.step(7, directions[m], first)
+        }
+        assert.equal(got, expected, `focused ${focused}, Tabs ${directions}, order ${order}`)
+      }
+    }
+  }
 })

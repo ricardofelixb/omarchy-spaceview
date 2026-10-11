@@ -12,9 +12,10 @@ import "Switcher.js" as Switcher
 // A payload of {"step": 1} or {"step": -1} opens it as a workspace switcher
 // instead (Super+Tab, Super+Shift+Tab): each further step moves the pick, and
 // `commitSwitch`, called when Super is let go, goes to the picked workspace.
-// Both carry the number of the Super hold ("session"), and the release how far
-// the Tabs moved the pick ("offset"), because the calls are separate processes
-// and can arrive in any order. Switcher.js has the rules.
+// Both carry the number of the Super hold ("session") and the direction of its
+// first Tab ("first"), and the release how far the Tabs moved the pick
+// ("offset"), because the calls are separate processes and can arrive in any
+// order. Switcher.js has the rules.
 //
 // Hyprland is configured in Lua here, so every dispatch goes through the
 // hl.dsp.* form; the classic "workspace 3" syntax is a Lua syntax error.
@@ -175,8 +176,8 @@ Item {
   }
 
   // The "add" card is left out: a switcher cycles workspaces that exist.
-  function stepSwitcher(direction, session) {
-    root.selectedCardIndex = Switcher.step(root.switcher, session, direction,
+  function stepSwitcher(direction, session, first) {
+    root.selectedCardIndex = Switcher.step(root.switcher, session, direction, first,
       root.selectedCardIndex, root.focusedCardIndex(), root.workspaceCount)
   }
 
@@ -185,16 +186,16 @@ Item {
   // the overview) never switches workspace.
   function commitSwitch(payloadJson) {
     var request = root.switchPayload(payloadJson)
-    var index = Switcher.release(root.switcher, request.session, request.offset,
+    var index = Switcher.release(root.switcher, request.session, request.offset, request.first,
       root.selectedCardIndex, root.focusedCardIndex(), root.workspaceCount)
     if (index < 0) return "ignored"
     root.activateWorkspace(root.workspaceModel[index])
     return "ok"
   }
 
-  // The step (1 or -1, else 0), session number and offset of an IPC payload such
-  // as {"step": 1, "session": 7, "offset": 2}; anything unreadable counts as
-  // none (0, 0, null).
+  // The step (1 or -1, else 0), session number, first step and offset of an IPC
+  // payload such as {"step": 1, "session": 7, "first": 1, "offset": 2}; anything
+  // unreadable counts as none (0, 0, the step itself, null).
   function switchPayload(payloadJson) {
     var payload = null
     try {
@@ -204,10 +205,12 @@ Item {
     if (payload === null || typeof payload !== "object") payload = {}
     var step = Number(payload.step)
     var session = Number(payload.session)
+    var first = Number(payload.first)
     var offset = payload.offset
     return {
       step: step === 1 || step === -1 ? step : 0,
       session: isFinite(session) && session > 0 ? session : 0,
+      first: first === 1 || first === -1 ? first : step,
       offset: typeof offset === "number" && isFinite(offset) && Math.floor(offset) === offset ? offset : null
     }
   }
@@ -280,7 +283,7 @@ Item {
 
     // Already showing: another Tab just moves the pick.
     if (step !== 0 && root.opened) {
-      root.stepSwitcher(step, request.session)
+      root.stepSwitcher(step, request.session, request.first)
       return
     }
 
@@ -294,7 +297,7 @@ Item {
     root.selectedCardIndex = root.initialSelectedCardIndex()
     Switcher.end(root.switcher)
     root.opened = true
-    if (step !== 0) root.stepSwitcher(step, request.session)
+    if (step !== 0) root.stepSwitcher(step, request.session, request.first)
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
