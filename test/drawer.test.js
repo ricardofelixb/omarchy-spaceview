@@ -66,6 +66,20 @@ test('a drawer window can move back out to a numbered or new workspace', () => {
   assert.equal(root.moveWindowToWorkspace(window, 11), false);
 });
 
+test('scratchpad events refresh monitor state even when the overview is closed', () => {
+  const handler = qml.match(/    function onRawEvent\([^]*?\n    \}/);
+  assert.ok(handler);
+  let refreshes = 0;
+  const context = vm.createContext({ root: { opened: false },
+    Hyprland: { refreshMonitors() { refreshes++; } },
+  });
+  vm.runInContext(handler[0], context);
+  context.onRawEvent({ name: 'activespecial' });
+  context.onRawEvent({ name: 'activespecialv2' });
+  context.onRawEvent({ name: 'activewindow' });
+  assert.equal(refreshes, 2);
+});
+
 test('keyboard reaches the separate drawer row without confusing it with +', () => {
   const { root, calls } = setup();
   root.selectedCardIndex = 1;

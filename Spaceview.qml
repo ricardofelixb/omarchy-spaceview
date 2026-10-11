@@ -283,6 +283,7 @@ Item {
   function open() {
     Hyprland.refreshToplevels()
     Hyprland.refreshWorkspaces()
+    Hyprland.refreshMonitors()
     rescueTimer.restart()
     root.targetScreen = root.focusedScreen()
     root.draggedToplevel = null
@@ -561,11 +562,14 @@ Item {
   // fire constantly and would keep the settle timer restarting forever.
   Connections {
     target: Hyprland
-    enabled: root.opened
-
     function onRawEvent(event) {
       var name = String(event && event.name ? event.name : "").toLowerCase()
-      if (root.layoutEvents.indexOf(name) !== -1) root.refreshSoon()
+      // Quickshell does not refresh monitor IPC state on scratchpad toggles.
+      // Keep it current even while closed, so reopening an open drawer never
+      // mistakes it for a hidden one and toggles it off.
+      if (name === "activespecial" || name === "activespecialv2")
+        Hyprland.refreshMonitors()
+      if (root.opened && root.layoutEvents.indexOf(name) !== -1) root.refreshSoon()
     }
   }
 
