@@ -337,14 +337,19 @@ BorderSurface {
     anchors.right: parent.right
     anchors.margins: Style.spacing.sm
     z: 30
-    visible: cardHover.hovered && root.occupied && !root.drawer
-      && !root.addWorkspace && !root.dragActive
+    readonly property bool revealed: cardHover.hovered && root.occupied
+      && !root.drawer && !root.addWorkspace && !root.dragActive
+    opacity: revealed ? 1 : 0
+    visible: opacity > 0
+    enabled: revealed
+    Behavior on opacity { NumberAnimation { duration: 90 } }
     iconText: "×"
+    fontSize: Style.font.icon * 1.2
     tooltipText: "Close workspace and its " + root.windowCount
       + (root.windowCount === 1 ? " window" : " windows")
     foreground: Color.menu.text
     hoverColor: Color.urgent
-    color: Color.menu.background
+    color: "transparent"
     onClicked: root.closeRequested()
   }
 
