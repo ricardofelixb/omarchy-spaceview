@@ -11,6 +11,7 @@ BorderSurface {
   property var workspace: null
   property bool focused: false
   property bool addWorkspace: false
+  property bool drawer: false
   property bool keyboardSelected: false
   property var draggedToplevel: null
   property bool capturing: true
@@ -126,9 +127,9 @@ BorderSurface {
     ? Number(draggedToplevel.workspace.id) : -1
   readonly property bool dragActive: draggedToplevel !== null
     && String(draggedToplevel.address || "") !== ""
-    && workspaceId > 0 && workspaceId <= 10
+    && (drawer || (workspaceId > 0 && workspaceId <= 10))
   readonly property bool foreignDrag: dragActive && draggedSourceWorkspaceId !== workspaceId
-  readonly property bool validDropTarget: dragActive && (foreignDrag || windowCount > 1)
+  readonly property bool validDropTarget: dragActive && (foreignDrag || (!drawer && windowCount > 1))
   readonly property bool dropHovered: foreignDrag && dropArea.containsDrag
     && root.dropTargetPreview === null
   readonly property real accentBorderWidth: Math.max(Style.space(2), Style.focusBorderWidth)
@@ -146,7 +147,8 @@ BorderSurface {
   // Which tile is under the pointer, and which side of it the window would
   // take. Grid children are WindowPreview items laid out inside previewArea.
   function updateDropTarget(cardX, cardY) {
-    if (!validDropTarget) {
+    // The drawer is storage, not a numbered workspace with directional tiling.
+    if (root.drawer || !validDropTarget) {
       root.dropTargetPreview = null
       root.dropTargetDirection = ""
       return
@@ -224,12 +226,45 @@ BorderSurface {
   Text {
     visible: !root.occupied && !root.addWorkspace
     anchors.centerIn: previewArea
-    text: "Empty"
+    text: root.drawer ? "Drop windows here" : "Empty"
     textFormat: Text.PlainText
     color: Color.menu.text
     opacity: 0.42
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.body
+  }
+
+  Row {
+    visible: root.drawer
+    z: 6
+    anchors.top: parent.top
+    anchors.topMargin: Style.spacing.sm
+    anchors.horizontalCenter: parent.horizontalCenter
+    spacing: Style.spacing.sm
+
+    Rectangle {
+      width: Style.space(16)
+      height: Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      color: "transparent"
+      border.color: Color.menu.text
+      radius: Style.space(2)
+      opacity: 0.7
+      Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Style.space(3)
+        width: Style.space(6)
+        height: Math.max(1, Style.space(1))
+        color: Color.menu.text
+      }
+    }
+    Text {
+      text: "Drawer"
+      color: Color.menu.text
+      font.family: Style.font.menuFamily
+      font.pixelSize: Style.font.body
+    }
   }
 
   Item {
@@ -238,6 +273,7 @@ BorderSurface {
     z: 5
     anchors.fill: parent
     anchors.margins: Style.spacing.md
+    anchors.topMargin: root.drawer ? Style.font.body + Style.spacing.sm * 2 : Style.spacing.md
 
     // The stage keeps the monitor's aspect ratio, so a tall split reads as a
     // tall split instead of being stretched to the card.
