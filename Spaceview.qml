@@ -4,18 +4,9 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
-import "Switcher.js" as Switcher
 
 // Fullscreen workspace overview. Summoned over shell IPC:
 //   omarchy-shell shell toggle ecylmz.spaceview
-//
-// A payload of {"step": 1} or {"step": -1} opens it as a workspace switcher
-// instead (Super+Tab, Super+Shift+Tab): each further step moves the pick, and
-// `commitSwitch`, called when Super is let go, goes to the picked workspace.
-// Both carry the number of the Super hold ("session") and the direction of its
-// first Tab ("first"), and the release how far the Tabs moved the pick
-// ("offset"), because the calls are separate processes and can arrive in any
-// order. Switcher.js has the rules.
 //
 // Hyprland is configured in Lua here, so every dispatch goes through the
 // hl.dsp.* form; the classic "workspace 3" syntax is a Lua syntax error.
@@ -44,8 +35,6 @@ Item {
   property string requestedWindowAddress: ""
   property point dragScenePosition: Qt.point(0, 0)
   property int selectedCardIndex: -1
-  // Which Super+Tab session is under way, if any (see Switcher.js).
-  readonly property var switcher: Switcher.create()
 
   readonly property var workspaceModel: root.workspaceIds()
   readonly property int workspaceCount: workspaceModel.length
@@ -182,46 +171,6 @@ Item {
     return root.cardCount > 0 ? 0 : -1
   }
 
-  // The "add" card is left out: a switcher cycles workspaces that exist.
-  function stepSwitcher(direction, session, first) {
-    root.selectedCardIndex = Switcher.step(root.switcher, session, direction, first,
-      root.selectedCardIndex, root.focusedCardIndex(), root.workspaceCount)
-  }
-
-  // Called over IPC when Super is let go. Does nothing unless that session is
-  // the one running, so a stray release (after Esc, or after a gesture opened
-  // the overview) never switches workspace.
-  function commitSwitch(payloadJson) {
-    var request = root.switchPayload(payloadJson)
-    var index = Switcher.release(root.switcher, request.session, request.offset, request.first,
-      root.selectedCardIndex, root.focusedCardIndex(), root.workspaceCount)
-    if (index < 0) return "ignored"
-    root.activateWorkspace(root.workspaceModel[index])
-    return "ok"
-  }
-
-  // The step (1 or -1, else 0), session number, first step and offset of an IPC
-  // payload such as {"step": 1, "session": 7, "first": 1, "offset": 2}; anything
-  // unreadable counts as none (0, 0, the step itself, null).
-  function switchPayload(payloadJson) {
-    var payload = null
-    try {
-      payload = JSON.parse(payloadJson || "{}")
-    } catch (e) {
-    }
-    if (payload === null || typeof payload !== "object") payload = {}
-    var step = Number(payload.step)
-    var session = Number(payload.session)
-    var first = Number(payload.first)
-    var offset = payload.offset
-    return {
-      step: step === 1 || step === -1 ? step : 0,
-      session: isFinite(session) && session > 0 ? session : 0,
-      first: first === 1 || first === -1 ? first : step,
-      offset: typeof offset === "number" && isFinite(offset) && Math.floor(offset) === offset ? offset : null
-    }
-  }
-
   function moveCardSelection(dx, dy) {
     root.selectedCardIndex = root.cardIndexAfterMove(
       root.selectedCardIndex, dx, dy, root.cardCount, root.columns)
@@ -281,19 +230,7 @@ Item {
     }
   }
 
-  function open(payloadJson) {
-    var request = root.switchPayload(payloadJson)
-    var step = request.step
-
-    // Its session is over (switched, cancelled) or superseded: nothing to open.
-    if (step !== 0 && Switcher.stepIsStale(root.switcher, request.session)) return
-
-    // Already showing: another Tab just moves the pick.
-    if (step !== 0 && root.opened) {
-      root.stepSwitcher(step, request.session, request.first)
-      return
-    }
-
+  function open() {
     Hyprland.refreshToplevels()
     Hyprland.refreshWorkspaces()
     rescueTimer.restart()
@@ -302,9 +239,7 @@ Item {
     root.requestedWorkspaceId = -1
     root.requestedWindowAddress = ""
     root.selectedCardIndex = root.initialSelectedCardIndex()
-    Switcher.end(root.switcher)
     root.opened = true
-    if (step !== 0) root.stepSwitcher(step, request.session, request.first)
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -315,7 +250,6 @@ Item {
 
     root.draggedToplevel = null
     root.selectedCardIndex = -1
-    Switcher.end(root.switcher)
     root.opened = false
   }
 
